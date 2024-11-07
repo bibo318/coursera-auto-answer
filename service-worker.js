@@ -1,69 +1,80 @@
 function injectedFunction() {
-    let element;
+    function splitText(text, maxLength) {
+        let result = [];
+        while (text.length > maxLength) {
+            let splitIndex = text.lastIndexOf('\n', maxLength);
+            if (splitIndex === -1) splitIndex = maxLength;
+            result.push(text.slice(0, splitIndex));
+            text = text.slice(splitIndex + 1);
+        }
+        result.push(text);
+        return result;
+    }
 
-    console.log("Checking for element with selector .css-1da2g7c");
-    if (document.querySelector(".css-1da2g7c") !== null) {
-        element = document.querySelectorAll(".css-1da2g7c p span span");
-        console.log("Elements found with .css-1da2g7c");
+    async function sendRequestToChatGPT(textPart) {
+        const data = {
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "user", content: textPart }],
+            max_tokens: 150
+        };
+        const payload = JSON.stringify(data);
+        const headers = {
+            "Authorization": "Bearer API-KEY-CHATGPT",
+            "Content-Type": "application/json",
+        };
+        const url = "https://api.openai.com/v1/chat/completions";
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: headers,
+            body: payload
+        });
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`Phản hồi của mạng không ổn: ${text}`);
+        }
+        const response_json = await response.json();
+        return response_json.choices[0].message.content;
+    }
+
+    let element;
+    console.log("Checking for element with selector .css-dqaucz");
+    if (document.querySelector(".css-dqaucz") !== null) {
+        element = document.querySelectorAll(".css-dqaucz p span span");
+        console.log("Elements found with .css-dqaucz");
     } else {
         element = document.querySelectorAll(".rc-FormPartsQuestion p span span");
         console.log("Elements found with .rc-FormPartsQuestion");
     }
 
     let text = "";
-    for (var i = 0; i < element.length; i++) {
+    for (let i = 0; i < element.length; i++) {
         text += element[i].innerHTML + "\n";
     }
 
     console.log("Extracted text:", text);
 
     const safeInput = text + "\n Đây là bài kiểm tra, tôi nhấn mạnh rằng chỉ gửi số câu hỏi và nội dung câu trả lời đúng";
+    const parts = splitText(safeInput, 2000);
 
-    const data = {
-        model: "gpt-3.5-turbo", // Cập nhật mô hình
-        messages: [{ role: "user", content: safeInput }], // Định dạng payload cho mô hình GPT-3.5 Turbo
-        max_tokens: 150
-    };
-    const payload = JSON.stringify(data);
-    const headers = {
-        "Authorization": "API KEY CHATGPT",
-        "Content-Type": "application/json",
-    };
-    const url = "https://api.openai.com/v1/chat/completions"; // Cập nhật URL endpoint cho GPT-3.5 Turbo
+    (async function processParts() {
+        for (let i = 0; i < parts.length; i++) {
+            try {
+                console.log(`Sending part ${i + 1} of ${parts.length}`);
+                const responseText = await sendRequestToChatGPT(parts[i]);
+                console.log("Processed text:", responseText);
 
-    console.log("Sending request to:", url);
-    console.log("Request headers:", headers);
-    console.log("Request payload:", payload);
-
-    fetch(url, {
-            method: 'POST',
-            headers: headers,
-            body: payload
-        })
-        .then(response => {
-            console.log("Received response:", response);
-            if (response.ok) {
-                return response.json();
-            } else {
-                return response.text().then(text => {
-                    throw new Error(`Phản hồi của mạng không ổn: ${text}`);
-                });
-            }
-        })
-        .then(response_json => {
-            console.log("Response JSON:", response_json);
-            const oti = response_json.choices[0].message.content;
-            console.log("Processed text:", oti);
-            for (var i = 0; i < element.length; i++) {
-                if (oti.toLowerCase().includes(element[i].innerHTML.toLowerCase())) {
-                    console.log("Matching element:", element[i].innerHTML);
-                    element[i].style = "border-style: solid; border-color: #0d7a0d;";
+                for (let j = 0; j < element.length; j++) {
+                    if (responseText.toLowerCase().includes(element[j].innerHTML.toLowerCase())) {
+                        console.log("Matching element:", element[j].innerHTML);
+                        element[j].style = "border-style: solid; border-color: #0d7a0d;";
+                    }
                 }
+            } catch (error) {
+                console.error('Error:', error);
             }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
+        }
+    })();
 }
 
 chrome.action.onClicked.addListener((tab) => {
